@@ -2,8 +2,11 @@
 name = "projet"
 version = "0.1.0"
 authors = [
-	"Nicolas Argyriou <argyriou@etu.unistra.fr>", 
-	"Quentin Gliech <quentin.gliech@etu.unistra.fr>"
+        "Nicolas Argyriou <argyriou@etu.unistra.fr>",
+        "Quentin Gliech <quentin.gliech@etu.unistra.fr>"
 ]
 
-[dependencies]
+
+[dependencies.nom]
+version = "^3.2"
+features = ["nightly"]
