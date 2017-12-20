@@ -2,22 +2,62 @@ use std::str;
 use std::str::FromStr;
 use nom::{is_alphabetic, is_alphanumeric};
 
+macro_rules! named_attr(
+    ($i:expr, $name:expr, $submac:ident!( $($args:tt)* )) => (
+        map!($i, attr!(tag!($name), $submac!( $($args)* )), |(_, v)| v)
+    );
+
+    ($i:expr, $f:expr, $g:expr) => (
+        named_attr!($i, $f, call!($g));
+    );
+);
+
+macro_rules! attr(
+    ($i:expr, $submac:ident!( $($args:tt)* ), $submac2:ident!( $($args2:tt)* )) => (
+        do_parse!($i,
+            attr: $submac!($($args)*) >>
+            ws!(tag!("=")) >>
+            value: attr_value!($submac2!($($args2)*)) >>
+            (attr, value)
+        )
+    );
+
+    ($i:expr, $submac:ident!( $($args:tt)* ), $g:expr) => (
+        attr!($i, $submac!($($args)*), call!($g));
+    );
+
+    ($i:expr, $f:expr, $submac:ident!( $($args:tt)* )) => (
+        attr!($i, call!($f), $submac!($($args)*));
+    );
+
+    ($i:expr, $f:expr, $g:expr) => (
+        attr!($i, call!($f), call!($g));
+    );
+);
+
+macro_rules! attr_value(
+    ($i:expr, $submac:ident!( $($args:tt)* )) => (
+        alt!($i,
+            delimited!(tag!("\""), $submac!($($args)* ), tag!("\""))
+            | delimited!(tag!("'"), $submac!($($args)* ), tag!("'"))
+        )
+    );
+    ($i:expr, $f:expr) => (
+        attr_value!($i, call!($f))
+    );
+);
+
 named!(
     yes_no<bool>,
     alt!(value!(true, tag!("yes")) | value!(false, tag!("no")))
 );
 
-named!(
-    sd_decl<bool>,
-    ws!(preceded!(
-        tag!("standalone="),
-        alt!(delimited!(tag!("\""), yes_no, tag!("\"")) | delimited!(tag!("'"), yes_no, tag!("'")))
-    ))
-);
+named!(sd_decl<bool>, ws!(named_attr!("standalone", yes_no)));
 
 fn is_enc_name(chr: u8) -> bool {
     is_alphanumeric(chr) || ['.', '-', '_'].contains(&(chr as char))
 }
+
 named!(
     enc_name<String>,
     map_res!(
@@ -32,16 +72,7 @@ named!(
     )
 );
 
-named!(
-    enc_decl<String>,
-    ws!(preceded!(
-        tag!("encoding="),
-        alt!(
-            delimited!(tag!("\""), enc_name, tag!("\""))
-                | delimited!(tag!("'"), enc_name, tag!("'"))
-        )
-    ))
-);
+named!(enc_decl<String>, ws!(named_attr!("encoding", enc_name)));
 
 fn is_name_char(chr: u8) -> bool {
     is_alphanumeric(chr) || ['.', '-', '_', ':'].contains(&(chr as char))
@@ -52,8 +83,7 @@ fn is_name_start(chr: u8) -> bool {
 }
 
 fn is_version_num(chr: u8) -> bool {
-    is_alphanumeric(chr) || chr == '-' as u8 || chr == '_' as u8 || chr == ':' as u8
-        || chr == '.' as u8
+    is_alphanumeric(chr) || ['.', '-', '_', ':'].contains(&(chr as char))
 }
 
 named!(
@@ -80,13 +110,7 @@ named!(
 
 named!(
     version_decl<String>,
-    ws!(preceded!(
-        tag!("version="),
-        alt!(
-            delimited!(tag!("\""), version_num, tag!("\""))
-                | delimited!(tag!("'"), version_num, tag!("'"))
-        )
-    ))
+    ws!(named_attr!("version", version_num))
 );
 
 #[derive(Debug, PartialEq)]
