@@ -4,4 +4,4 @@ extern crate utf8_ranges;
 
 mod parser;
 
-pub use parser::xml_prolog;
+pub use parser::xml_doc;

@@ -1,6 +1,6 @@
 use std::str;
 use std::str::FromStr;
-use nom::{is_alphabetic, is_alphanumeric, IResult, Needed};
+use nom::{is_alphabetic, is_alphanumeric, multispace, IResult, Needed};
 
 macro_rules! named_attr(
     ($i:expr, $name:expr, $submac:ident!( $($args:tt)* )) => (
@@ -69,6 +69,15 @@ macro_rules! attr_value(
     );
     ($i:expr, $f:expr) => (
         attr_value!($i, call!($f))
+    );
+);
+
+macro_rules! space_first(
+    ($i:expr, $submac:ident!( $($args:tt)* )) => (
+        preceded!($i, multispace, $submac!( $($args)* ))
+    );
+    ($i:expr, $j:expr) => (
+        space_first!($i, call!($j))
     );
 );
 
@@ -154,9 +163,9 @@ named!(
     delimited!(
         tag!("<?xml"),
         do_parse!(
-            version: preceded!(tag!(" "), version_decl)
-                >> encoding: alt!(preceded!(tag!(" "), enc_decl) | value!(String::from("UTF-8")))
-                >> standalone: alt!(preceded!(tag!(" "), sd_decl) | value!(false))
+            version: space_first!(version_decl)
+                >> encoding: alt!(space_first!(enc_decl) | value!(String::from("UTF-8")))
+                >> standalone: alt!(space_first!(sd_decl) | value!(false))
                 >> (XMLDecl {
                     version,
                     encoding,
@@ -181,29 +190,26 @@ named!(
 named!(prolog_misc<Vec<Comment>>, ws!(many0!(ws!(comment))));
 
 #[derive(Debug, PartialEq)]
-pub struct XMLProlog {
+struct XMLProlog {
     decl: Option<XMLDecl>,
     comments: Vec<Comment>,
     doctype: Option<Doctype>,
 }
 
 named!(
-    pub xml_prolog<XMLProlog>,
+    xml_prolog<XMLProlog>,
     do_parse!(
-        decl: opt!(xml_decl) >>
-        comments1: prolog_misc >>
-        doctype: ws!(opt!(doctype_decl)) >>
-        comments2: prolog_misc >>
-        (XMLProlog {
+        decl: opt!(xml_decl) >> comments1: prolog_misc >> doctype: ws!(opt!(doctype_decl))
+            >> comments2: prolog_misc >> (XMLProlog {
             decl,
             doctype,
-            comments: [&comments1[..], &comments2[..]].concat()
+            comments: [&comments1[..], &comments2[..]].concat(),
         })
     )
 );
 
 #[derive(Debug, PartialEq)]
-pub struct Doctype {
+struct Doctype {
     name: String,
 }
 
@@ -224,7 +230,7 @@ struct Attribute {
 
 named!(
     attribute<Attribute>,
-    ws!(map_res!(
+    map_res!(
         attr!(name, is_not!("^<&")),
         |(name, value)| -> Result<Attribute, str::Utf8Error> {
             Ok(Attribute {
@@ -232,22 +238,65 @@ named!(
                 value: String::from(str::from_utf8(value)?),
             })
         }
-    ))
+    )
 );
 
 #[derive(Debug, PartialEq)]
-struct Tag {
+enum Content {
+    Comment(Comment),
+    Element(Element),
+}
+
+#[derive(Debug, PartialEq)]
+struct Element {
     name: String,
     attributes: Vec<Attribute>,
+    children: Vec<Content>,
+}
+
+named!(element<Element>, alt!(empty_elem_tag | tag_pair));
+
+named!(
+    content<Content>,
+    alt!(map!(comment, |c| Content::Comment(c)) | map!(element, |e| Content::Element(e)))
+);
+
+named!(
+    empty_elem_tag<Element>,
+    do_parse!(
+        tag!("<") >> name: name >> attributes: many0!(space_first!(attribute)) >> opt!(multispace)
+            >> tag!("/>") >> (Element {
+            name,
+            attributes,
+            children: Vec::new(),
+        })
+    )
+);
+
+named!(
+    tag_pair<Element>,
+    do_parse!(
+        tag!("<") >> tag_name: name >> attributes: many0!(space_first!(attribute)) >> tag!(">")
+            >> children: ws!(many0!(ws!(content))) >> tag!("</") >> name >> opt!(multispace)
+            >> tag!(">") >> (Element {
+            name: tag_name,
+            attributes,
+            children,
+        })
+    )
+);
+
+#[derive(Debug, PartialEq)]
+pub struct XMLDoc {
+    prolog: XMLProlog,
+    root: Element,
+    misc: Vec<Comment>,
 }
 
 named!(
-    empty_elem_tag<Tag>,
+    pub xml_doc<XMLDoc>,
     do_parse!(
-        tag!("<") >> name: name >> attributes: many0!(attribute) >> tag!("/>") >> (Tag {
-            name,
-            attributes,
-        })
+        prolog: xml_prolog >> root: element >> misc: prolog_misc >> (XMLDoc { prolog, root, misc })
     )
 );
 
@@ -310,8 +359,7 @@ mod tests {
             b"<?xml version='1.0' ?>
             <!-- Hey. -->
             <!DOCTYPE html>
-            <!-- Ho. -->
-        ",
+            <!-- Ho. -->",
         );
 
         let comments = vec![
@@ -364,7 +412,7 @@ mod tests {
     #[test]
     fn parse_empty_elem_tag() {
         let tag = empty_elem_tag(b"<img src='test' />");
-        let expected = Tag {
+        let expected = Element {
             name: String::from("img"),
             attributes: vec![
                 Attribute {
@@ -372,8 +420,118 @@ mod tests {
                     value: String::from("test"),
                 },
             ],
+            children: vec![],
         };
 
         assert_eq!(tag, IResult::Done(&b""[..], expected));
+    }
+
+    #[test]
+    fn parse_tag_pair() {
+        let tag = tag_pair(
+            b"<p>
+                <img src='test' width='42' />
+                <!-- Separator -->
+                <hr />
+            </p>",
+        );
+
+        let expected = Element {
+            name: String::from("p"),
+            attributes: vec![],
+            children: vec![
+                Content::Element(Element {
+                    name: String::from("img"),
+                    attributes: vec![
+                        Attribute {
+                            name: String::from("src"),
+                            value: String::from("test"),
+                        },
+                        Attribute {
+                            name: String::from("width"),
+                            value: String::from("42"),
+                        },
+                    ],
+                    children: vec![],
+                }),
+                Content::Comment(Comment(String::from(" Separator "))),
+                Content::Element(Element {
+                    name: String::from("hr"),
+                    attributes: vec![],
+                    children: vec![],
+                }),
+            ],
+        };
+
+        let tag = tag.map_err(|e| {
+            println!("{}", e.description());
+            e
+        });
+
+        assert_eq!(tag, IResult::Done(&b""[..], expected));
+    }
+
+    #[test]
+    fn parse_xml_doc() {
+        let doc = xml_doc(
+            b"<?xml version='1.0' ?>
+            <!-- Hey. -->
+            <!DOCTYPE html>
+            <!-- Ho. -->
+            <p>
+                <img src='test' width='42' />
+                <!-- Separator -->
+                <hr />
+            </p>
+            <!-- End. -->",
+        );
+
+        let prolog = XMLProlog {
+            decl: Some(XMLDecl {
+                version: String::from("1.0"),
+                encoding: String::from("UTF-8"),
+                standalone: false,
+            }),
+            comments: vec![
+                Comment(String::from(" Hey. ")),
+                Comment(String::from(" Ho. ")),
+            ],
+            doctype: Some(Doctype {
+                name: String::from("html"),
+            }),
+        };
+
+        let root = Element {
+            name: String::from("p"),
+            attributes: vec![],
+            children: vec![
+                Content::Element(Element {
+                    name: String::from("img"),
+                    attributes: vec![
+                        Attribute {
+                            name: String::from("src"),
+                            value: String::from("test"),
+                        },
+                        Attribute {
+                            name: String::from("width"),
+                            value: String::from("42"),
+                        },
+                    ],
+                    children: vec![],
+                }),
+                Content::Comment(Comment(String::from(" Separator "))),
+                Content::Element(Element {
+                    name: String::from("hr"),
+                    attributes: vec![],
+                    children: vec![],
+                }),
+            ],
+        };
+
+        let misc = vec![Comment(String::from(" End. "))];
+
+        let expected = XMLDoc { prolog, root, misc };
+
+        assert_eq!(doc, IResult::Done(&b""[..], expected));
     }
 }
