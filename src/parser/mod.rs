@@ -1,6 +1,6 @@
 use std::str;
 use std::str::FromStr;
-use nom::{is_alphabetic, is_alphanumeric};
+use nom::{is_alphabetic, is_alphanumeric, IResult, Needed};
 
 macro_rules! named_attr(
     ($i:expr, $name:expr, $submac:ident!( $($args:tt)* )) => (
@@ -35,11 +35,36 @@ macro_rules! attr(
     );
 );
 
+macro_rules! attr_inner {
+    ($i:expr, $c:expr, $submac:ident!( $($args:tt)* )) => {
+        match is_not!($i, $c) {
+            IResult::Done(i1, o1) => {
+                match $submac!(o1, $($args)* ) {
+                    IResult::Done(i2, o2) => {
+                        if i2.len() > 0 {
+                            IResult::Incomplete(Needed::Unknown)
+                        } else {
+                            IResult::Done(i1, o2)
+                        }
+                    },
+                    e => e,
+                }
+            },
+            e => e,
+        }
+    };
+
+    ($i:expr, $f:expr, $g: expr) => (
+        attr_value!($i, $f, call!($g))
+    );
+}
+
 macro_rules! attr_value(
     ($i:expr, $submac:ident!( $($args:tt)* )) => (
         alt!($i,
-            delimited!(tag!("\""), $submac!($($args)* ), tag!("\""))
-            | delimited!(tag!("'"), $submac!($($args)* ), tag!("'"))
+            delimited!(char!('"'), escaped!(attr_inner!("\"", $submac!( $($args)* )), '\\', char!('"')), char!('"'))
+            |
+            delimited!(char!('\''), escaped!(attr_inner!("'", $submac!( $($args)* )), '\\', char!('\'')), char!('\''))
         )
     );
     ($i:expr, $f:expr) => (
@@ -47,32 +72,39 @@ macro_rules! attr_value(
     );
 );
 
-named!(
-    yes_no<bool>,
-    alt!(value!(true, tag!("yes")) | value!(false, tag!("no")))
-);
+named!(yes_no, alt!(tag!("yes") | tag!("no")));
 
-named!(sd_decl<bool>, ws!(named_attr!("standalone", yes_no)));
+named!(
+    sd_decl<bool>,
+    map_opt!(
+        ws!(named_attr!("standalone", yes_no)),
+        |v| match str::from_utf8(v) {
+            Ok("yes") => Some(true),
+            Ok("no") => Some(false),
+            _ => None,
+        }
+    )
+);
 
 fn is_enc_name(chr: u8) -> bool {
     is_alphanumeric(chr) || ['.', '-', '_'].contains(&(chr as char))
 }
 
 named!(
-    enc_name<String>,
-    map_res!(
-        map_res!(
-            preceded!(
-                peek!(take_while1_s!(is_alphabetic)),
-                take_while1_s!(is_enc_name)
-            ),
-            str::from_utf8
-        ),
-        FromStr::from_str
+    enc_name,
+    preceded!(
+        peek!(take_while1_s!(is_alphabetic)),
+        take_while1_s!(is_enc_name)
     )
 );
 
-named!(enc_decl<String>, ws!(named_attr!("encoding", enc_name)));
+named!(
+    enc_decl<String>,
+    map_res!(
+        map_res!(ws!(named_attr!("encoding", enc_name)), str::from_utf8),
+        FromStr::from_str
+    )
+);
 
 fn is_name_char(chr: u8) -> bool {
     is_alphanumeric(chr) || ['.', '-', '_', ':'].contains(&(chr as char))
@@ -100,17 +132,14 @@ named!(
     )
 );
 
-named!(
-    version_num<String>,
-    map_res!(
-        map_res!(take_while1_s!(is_version_num), str::from_utf8),
-        FromStr::from_str
-    )
-);
+named!(version_num, take_while1_s!(is_version_num));
 
 named!(
     version_decl<String>,
-    ws!(named_attr!("version", version_num))
+    map_res!(
+        map_res!(ws!(named_attr!("version", version_num)), str::from_utf8),
+        FromStr::from_str
+    )
 );
 
 #[derive(Debug, PartialEq)]
@@ -129,9 +158,9 @@ named!(
                 >> encoding: alt!(preceded!(tag!(" "), enc_decl) | value!(String::from("UTF-8")))
                 >> standalone: alt!(preceded!(tag!(" "), sd_decl) | value!(false))
                 >> (XMLDecl {
-                    version: version,
-                    encoding: encoding,
-                    standalone: standalone,
+                    version,
+                    encoding,
+                    standalone,
                 })
         ),
         tag!("?>")
@@ -166,8 +195,8 @@ named!(
         doctype: ws!(opt!(doctype_decl)) >>
         comments2: prolog_misc >>
         (XMLProlog {
-            decl: decl,
-            doctype: doctype,
+            decl,
+            doctype,
             comments: [&comments1[..], &comments2[..]].concat()
         })
     )
@@ -182,8 +211,43 @@ named!(
     doctype_decl<Doctype>,
     delimited!(
         tag!("<!DOCTYPE"),
-        do_parse!(name: ws!(name) >> (Doctype { name: name })),
+        do_parse!(name: ws!(name) >> (Doctype { name })),
         tag!(">")
+    )
+);
+
+#[derive(Debug, PartialEq)]
+struct Attribute {
+    name: String,
+    value: String,
+}
+
+named!(
+    attribute<Attribute>,
+    ws!(map_res!(
+        attr!(name, is_not!("^<&")),
+        |(name, value)| -> Result<Attribute, str::Utf8Error> {
+            Ok(Attribute {
+                name,
+                value: String::from(str::from_utf8(value)?),
+            })
+        }
+    ))
+);
+
+#[derive(Debug, PartialEq)]
+struct Tag {
+    name: String,
+    attributes: Vec<Attribute>,
+}
+
+named!(
+    empty_elem_tag<Tag>,
+    do_parse!(
+        tag!("<") >> name: name >> attributes: many0!(attribute) >> tag!("/>") >> (Tag {
+            name,
+            attributes,
+        })
     )
 );
 
@@ -281,5 +345,35 @@ mod tests {
                 }
             )
         );
+    }
+
+    #[test]
+    fn parse_attribute() {
+        assert_eq!(
+            attribute(b"src='test'"),
+            IResult::Done(
+                &b""[..],
+                Attribute {
+                    name: String::from("src"),
+                    value: String::from("test"),
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn parse_empty_elem_tag() {
+        let tag = empty_elem_tag(b"<img src='test' />");
+        let expected = Tag {
+            name: String::from("img"),
+            attributes: vec![
+                Attribute {
+                    name: String::from("src"),
+                    value: String::from("test"),
+                },
+            ],
+        };
+
+        assert_eq!(tag, IResult::Done(&b""[..], expected));
     }
 }
