@@ -1,7 +1,18 @@
 use parser::{Content, Element, XMLDoc};
+use std::fmt;
 
 #[derive(Debug)]
 pub struct Root(Vec<Node>);
+
+impl fmt::Display for Root {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Root")?;
+        for child in &self.0 {
+            child.pretty_print(f, 1)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub enum Node {
@@ -42,5 +53,20 @@ impl Node {
             }
             _ => None,
         }
+    }
+
+    pub fn pretty_print(&self, f: &mut fmt::Formatter, depth: usize) -> fmt::Result {
+        write!(f, "{0:1$}", "", depth * 2)?;
+        match self {
+            &Node::Path(ref path) => writeln!(f, "Path   {}…", &path[..40])?,
+            &Node::Group(ref children) => {
+                writeln!(f, "Group")?;
+                for child in children {
+                    child.pretty_print(f, depth + 1)?
+                }
+            }
+        }
+
+        Ok(())
     }
 }
