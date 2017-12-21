@@ -261,12 +261,15 @@ struct Element {
     children: Vec<Content>,
 }
 
-named!(element<Element>, alt!(empty_elem_tag | tag_pair));
+named!(
+    element<Element>,
+    preceded!(peek!(not!(tag!("</"))), alt!(empty_elem_tag | tag_pair))
+);
 
 named!(
     content<Content>,
     alt!(
-        map!(element, |e| Content::Element(e)) | map!(node_value, |c| Content::Chars(c))
+        map!(node_value, |c| Content::Chars(c)) | map!(element, |e| Content::Element(e))
             | map!(cdata, |c| Content::Chars(c)) | map!(comment, |c| Content::Comment(c))
     )
 );
@@ -337,7 +340,10 @@ pub struct XMLDoc {
 named!(
     pub xml_doc<XMLDoc>,
     do_parse!(
-        prolog: xml_prolog >> root: element >> misc: prolog_misc >> (XMLDoc { prolog, root, misc })
+        prolog: xml_prolog >>
+        root: element >>
+        misc: ws!(prolog_misc) >>
+        (XMLDoc { prolog, root, misc })
     )
 );
 
@@ -525,11 +531,11 @@ mod tests {
             <!-- Hey. -->
             <!DOCTYPE html>
             <!-- Ho. -->
-            <p>
+            <svg>
                 <img src='test' width='42' />
                 <!-- Separator -->
                 <hr />
-            </p>
+            </svg>
             <!-- End. -->",
         );
 
@@ -549,7 +555,7 @@ mod tests {
         };
 
         let root = Element {
-            name: String::from("p"),
+            name: String::from("svg"),
             attributes: vec![],
             children: vec![
                 Content::Element(Element {
