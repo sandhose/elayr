@@ -1,5 +1,6 @@
 use std::str;
 use std::str::FromStr;
+use std::iter::FromIterator;
 use nom::{is_alphabetic, is_alphanumeric, multispace, IResult, Needed};
 
 macro_rules! named_attr(
@@ -231,7 +232,7 @@ struct Attribute {
 named!(
     attribute<Attribute>,
     map_res!(
-        attr!(name, is_not!("^<&")),
+        attr!(name, is_not!("<&")),
         |(name, value)| -> Result<Attribute, str::Utf8Error> {
             Ok(Attribute {
                 name,
@@ -245,6 +246,7 @@ named!(
 enum Content {
     Comment(Comment),
     Element(Element),
+    Chars(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -258,7 +260,10 @@ named!(element<Element>, alt!(empty_elem_tag | tag_pair));
 
 named!(
     content<Content>,
-    alt!(map!(comment, |c| Content::Comment(c)) | map!(element, |e| Content::Element(e)))
+    alt!(
+        map!(element, |e| Content::Element(e)) | map!(node_value, |c| Content::Chars(c))
+            | map!(cdata, |c| Content::Chars(c)) | map!(comment, |c| Content::Comment(c))
+    )
 );
 
 named!(
@@ -284,6 +289,36 @@ named!(
             children,
         })
     )
+);
+
+named!(
+    cdata<String>,
+    map_res!(
+        map_res!(
+            delimited!(tag!("<![CDATA["), take_until_s!("]]>"), tag!("]]>")),
+            str::from_utf8
+        ),
+        FromStr::from_str
+    )
+);
+
+named!(char_data<char>, none_of!("<&"));
+
+named!(
+    entity_ref<char>,
+    delimited!(
+        char!('&'),
+        alt!(
+            value!('"', tag!("quot")) | value!('&', tag!("amp")) | value!('\'', tag!("apos"))
+                | value!('<', tag!("lt")) | value!('>', tag!("gt"))
+        ),
+        char!(';')
+    )
+);
+
+named!(
+    node_value<String>,
+    map!(ws!(many1!(alt!(char_data | entity_ref))), String::from_iter)
 );
 
 #[derive(Debug, PartialEq)]
@@ -427,12 +462,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_cdata() {
+        let cdata = cdata(b"<![CDATA[<i>test</i>]]>");
+        assert_eq!(cdata, IResult::Done(&b""[..], String::from("<i>test</i>")));
+    }
+
+    #[test]
     fn parse_tag_pair() {
         let tag = tag_pair(
             b"<p>
-                <img src='test' width='42' />
+                <img src='bleh' width=\"42\" />
                 <!-- Separator -->
-                <hr />
+                <i>italic</i>
             </p>",
         );
 
@@ -445,7 +486,7 @@ mod tests {
                     attributes: vec![
                         Attribute {
                             name: String::from("src"),
-                            value: String::from("test"),
+                            value: String::from("bleh"),
                         },
                         Attribute {
                             name: String::from("width"),
@@ -456,9 +497,9 @@ mod tests {
                 }),
                 Content::Comment(Comment(String::from(" Separator "))),
                 Content::Element(Element {
-                    name: String::from("hr"),
+                    name: String::from("i"),
                     attributes: vec![],
-                    children: vec![],
+                    children: vec![Content::Chars(String::from("italic"))],
                 }),
             ],
         };
