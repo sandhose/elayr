@@ -29,7 +29,11 @@ local function generate()
 		end
 		local x = math.random(0, maxx-width-10)
 		local y = math.random(0, maxy-height-10)
-		local color = {math.random(0,255),math.random(0,255),math.random(0,255)}
+		local r,g,b = math.random(0,255),math.random(0,255),math.random(0,255)
+		if (r+g+b) > 612 then
+			r,g,b = 0.8*r, 0.8*g, 0.8*b
+		end
+		local color = {r,g,b}
 		local shape = Movable(Rectangle(x, y, width, height))
 		shape.color = color
 		sorter:addShape(shape)
@@ -110,8 +114,8 @@ function love.draw()
 	end
 
 	local height = love.graphics.getHeight()
-	-- love.graphics.translate(0, height)
-	-- love.graphics.rotate(-math.pi/2)
+	love.graphics.translate(0, height)
+	love.graphics.rotate(-math.pi/2)
 	if sorter then
 		for i,v in pairs(sorter.shapes) do
 			love.graphics.setColor(v.color)
@@ -135,7 +139,7 @@ function love.keypressed(key, scancode, isrepeat)
 			toggle = 1
 		elseif toggle == 1 then
 			sorter:sort()
-			toggle = 0
+			toggle = 2
 		elseif toggle == 2 then
 			sorter:compact()
 			toggle = 0

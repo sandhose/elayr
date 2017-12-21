@@ -2,7 +2,7 @@ local Object = require "classic"
 local Sorter = Object:extend()
 local border = 10
 
-function getval(obj, method)
+local function getval(obj, method)
 	if type(obj[method]) == "function" then
 		return obj[method](obj)
 	else
@@ -10,7 +10,7 @@ function getval(obj, method)
 	end
 end
 
-function objectPartition(t, min, max, key)
+local function objectPartition(t, min, max, key)
 	local x = getval(t[max], key)
 	local i = min - 1
 	for j = min, max - 1 do
@@ -28,7 +28,7 @@ function objectPartition(t, min, max, key)
 	return i + 1
 end
 
-function objectQuicksort_rec(t, min, max, key)
+local function objectQuicksort_rec(t, min, max, key)
 	if min < max then
 		q = objectPartition(t, min, max, key)
 		objectQuicksort_rec(t, min, q - 1, key)
@@ -36,7 +36,7 @@ function objectQuicksort_rec(t, min, max, key)
 	end
 end
 
-function objectQuicksort(t, sortOnKey)
+local function objectQuicksort(t, sortOnKey)
 	return objectQuicksort_rec(t, 1, #t, sortOnKey)
 end
 
@@ -111,28 +111,41 @@ end
 local function findSpotNextTo(neighbor, shape)
 	local width, height = love.graphics.getDimensions()
 	
-	if neighbor.newx + neighbor.width + border + shape.width < width then
-		return (neighbor.newx + neighbor.width + border), neighbor.newy
+	if neighbor.newx + neighbor.width + shape.width < width then
+		return (neighbor.newx + neighbor.width), neighbor.newy
+	else
+		return nil
+	end
+end
+local function findSpotAbove(neighbor, shape)
+	local width, height = love.graphics.getDimensions()
+	
+	if neighbor.newy - neighbor.height - shape.height > 0 then
+		return neighbor.newx, neighbor.newy - neighbor.height - shape.height
 	else
 		return nil
 	end
 end
 
 local function findSpotUnder(neighbor, shape)
-	return neighbor.newx, (neighbor.newy + neighbor.height + border)
+	return neighbor.newx, (neighbor.newy + neighbor.height)
 end
 
 local function findSpot(sorted, shape)
 	local width, height = love.graphics.getDimensions()
 	local neighbor = findBottomRight(sorted)
-
+	local strategies = {findSpotAbove, findSpotNextTo, findSpotUnder}
 	local x, y
-	for i,v in pairs(sorted) do
-		x, y = findSpotNextTo(v, shape)
-		if x and y then 
-			shape:move(x, y)
-			if not shape:collide(sorted) then
-				return x,y 
+	for j=1, #strategies do
+		local f = strategies[j]
+
+		for i=1, #sorted do
+			local v = sorted[i]
+			x, y = f(v, shape)
+			if x and y then 
+				if not shape:collide(sorted, x, y) then
+					return x, y 
+				end
 			end
 		end
 	end
@@ -145,13 +158,13 @@ function Sorter:compact()
 	objectQuicksort(self.shapes, "getArea")
 	
 	local sorted = {}
-	self.shapes[#self.shapes]:moveTo(border, border)
+	self.shapes[#self.shapes]:move(0, 0)
 	table.insert(sorted, self.shapes[#self.shapes])
 
 	for i=#self.shapes-1, 1, -1 do
 		local shape = self.shapes[i]
 		local x, y = findSpot(sorted, shape)
-		shape:moveTo(x, y)
+		shape:move(x, y)
 		table.insert(sorted, shape)
 	end
 end

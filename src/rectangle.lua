@@ -62,7 +62,7 @@ function Rectangle:getArea()
 	return self.width*self.height
 end
 
-function Rectangle:collide(shapes)
+function Rectangle:collide(shapes, x, y)
 	local rect1 = self
 	if not shapes then
 		print("???")
@@ -72,11 +72,16 @@ function Rectangle:collide(shapes)
 		shapes = {shapes}
 	end
 
+	if not x or not y then
+		x = self.x
+		y = self.y
+	end
+
 	for _,rect2 in pairs(shapes) do
-		if (rect1.x < rect2.x + rect2.width and
-			rect1.x + rect1.width > rect2.x and
-			rect1.y < rect2.y + rect2.height and
-			rect1.height + rect1.y > rect2.y) then
+		if (x < rect2.x + rect2.width and
+			x + rect1.width > rect2.x and
+			y < rect2.y + rect2.height and
+			rect1.height + y > rect2.y) then
 			return true
 		end
 	end

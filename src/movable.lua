@@ -37,6 +37,8 @@ end
 function Movable:move(x, y)
 	self.x = x
 	self.y = y
+	self.newx = x
+	self.newy = y
 	return self.shape:move(x, y)
 end
 
@@ -45,6 +47,7 @@ function Movable:moveTo(x, y, duration)
 	self.oldy = self.y
 	self.newx = x
 	self.newy = y
+	self.timeElapsed = 0
 	self.duration = duration or 2
 	self.travelling = true
 end
@@ -54,10 +57,6 @@ function Movable:collide(...)
 end
 
 function Movable:updatePos(dt)
-	if not self.travelling then
-		return
-	end
-
 	if self.timeElapsed >= self.duration then
 		self.travelling = false
 		return
