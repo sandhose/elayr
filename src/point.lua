@@ -1,8 +1,9 @@
-local Object = require "classic"
+local Shape = require "shape"
 
-local Point = Object:extend()
+local Point = Shape:extend()
 
 function Point:new(x, y)
+	self.shape = "Point"
 	if x and y then
 		self.x = x
 		self.y = y

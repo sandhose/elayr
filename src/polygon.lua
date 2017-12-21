@@ -1,12 +1,13 @@
-local Object = require "classic"
+local Shape = require "shape"
 local Point  = require "point"
 local Line   = require "line"
 
-local Polygon = Object:extend()
+local Polygon = Shape:extend()
 
 function Polygon:new(...)
 	local args = {...}
 	local j = 1
+	self.shape = "Polygon"
 	self.vertices = {}
 	for i=1, #args, 2 do
 		self.vertices[j] = Point(args[i], args[i+1])

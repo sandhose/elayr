@@ -1,16 +1,36 @@
-local Object = require "classic"
-local Line   = require "line"
+local Shape = require "shape"
 local Point  = require "point"
+local Line   = require "line"
 
-local Rectangle = Object:extend()
+local Rectangle = Shape:extend()
 
 function Rectangle:new(x, y, width, height)
+	self.shape = "Rectangle"
 	self.x = x
 	self.y = y
 	self.width  = width
 	self.height = height
 
 	return self
+end
+
+function Rectangle:getVertices()
+	self.vertices = {}
+	self.vertices[1] = Point(self.x, self.y)
+	self.vertices[2] = Point(self.x + self.width, self.y)
+	self.vertices[3] = Point(self.x + self.width, self.y+self.height)
+	self.vertices[4] = Point(self.x, self.y+self.height)
+	return self.vertices
+end
+
+function Rectangle:getEdges()
+	local vertice = self:getVertices()
+	self.edges = {}
+	self.edges[1] = Line(vertice[1], vertice[2])
+	self.edges[2] = Line(vertice[2], vertice[3])
+	self.edges[3] = Line(vertice[3], vertice[4])
+	self.edges[4] = Line(vertice[4], vertice[1])
+	return self.edges
 end
 
 function Rectangle:move(x, y)
@@ -32,20 +52,25 @@ function Rectangle:down(val)
 end
 
 function Rectangle:draw()
-	self.vertices = {}
-	self.vertices[1] = Point(self.x, self.y)
-	self.vertices[2] = Point(self.x + self.width, self.y)
-	self.vertices[3] = Point(self.x + self.width, self.y+self.height)
-	self.vertices[4] = Point(self.x, self.y+self.height)
-
-	self.edges = {}
-	self.edges[1] = Line(self.vertices[1], self.vertices[2])
-	self.edges[2] = Line(self.vertices[2], self.vertices[3])
-	self.edges[3] = Line(self.vertices[3], self.vertices[4])
-	self.edges[4] = Line(self.vertices[4], self.vertices[1])
-
-	for i,v in pairs(self.edges) do
+	local edges = self:getEdges()
+	for i,v in pairs(edges) do
 		v:draw()
+	end
+end
+
+function Rectangle:getArea()
+	return self.width*self.height
+end
+
+function Rectangle:collide(rect2)
+	local rect1 = self
+	if (rect1.x < rect2.x + rect2.width and
+		rect1.x + rect1.width > rect2.x and
+		rect1.y < rect2.y + rect2.height and
+		rect1.height + rect1.y > rect2.y) then
+		return true
+	else
+		return false
 	end
 end
 

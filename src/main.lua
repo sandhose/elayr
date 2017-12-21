@@ -3,64 +3,125 @@ local Point     = require "point"
 local Line      = require "line"
 local Rectangle = require "rectangle"
 local Polygon   = require "polygon"
+local Sorter    = require "sorter"
+local Movable   = require "movable"
+local white = {255,255,255,255}
+local black = {0,0,0,255}
+local red   = {255,0,0,255}
+
+local function generate()
+	local maxx, maxy = love.graphics.getDimensions()
+	local sorter = Sorter()
+	for i=1, 70 do
+		local width  = math.random(20, maxx*0.1)
+		local height = math.random(0.2, 1.8)*width
+		local x = math.random(0, maxx-width-10)
+		local y = math.random(0, maxy-height-10)
+		local color = {math.random(0,255),math.random(0,255),math.random(0,255)}
+		local shape = Movable(Rectangle(x, y, width, height))
+		shape.color = color
+		sorter:addShape(shape)
+	end
+
+	return sorter
+end
 
 function love.load()
-	local white = {255,255,255,255}
-	local red = {255,0,0,255}
-	local black = {0,0,0,255}
+	math.randomseed(os.time())
+	love.window.setMode(900, 900, {vsync=false, centered=true})
 	love.graphics.setBackgroundColor(white)
 	love.graphics.setLineWidth(0.5)
-	love.keyboard.setKeyRepeat("up")
-	love.keyboard.setKeyRepeat("down")
-	love.keyboard.setKeyRepeat("left")
-	love.keyboard.setKeyRepeat("right")
+	if true then
+		p1 = Point(27.50, 25)
+		p2 = Point(27.50, 125)
+		p3 = Point(177.5, 25)
+		p4 = Point(177.5, 75)
+		p5 = Point(77.50, 75)
+		p6 = Point(77.50, 125)
+		seg1 = Line(p1, p2)
+		seg2 = Line(p2, p6)
+		seg3 = Line(p6, p5)
+		seg4 = Line(p5, p4)
+		seg5 = Line(p4, p3)
+		seg6 = Line(p3, p1)
+		p7 = Point(120.0*5, 30.0*5)
+		p8 = Point(110.0*5, 10.0*5)
+		p9 = Point(130.0*5, 10.0*5)
+		seg7 = Line(p7, p8)
+		seg8 = Line(p7, p9)
+		seg9 = Line(p8, p9)
+		poly = Polygon(100, 100, 200, 100, 150, 200)
 
-	p1 = Point(27.50, 25)
-	p2 = Point(27.50, 125)
-	p3 = Point(177.5, 25)
-	p4 = Point(177.5, 75)
-	p5 = Point(77.50, 75)
-	p6 = Point(77.50, 125)
-	seg1 = Line(p1, p2)
-	seg2 = Line(p2, p6)
-	seg3 = Line(p6, p5)
-	seg4 = Line(p5, p4)
-	seg5 = Line(p4, p3)
-	seg6 = Line(p3, p1)
-	p7 = Point(120.0*5, 30.0*5)
-	p8 = Point(110.0*5, 10.0*5)
-	p9 = Point(130.0*5, 10.0*5)
-	seg7 = Line(p7, p8)
-	seg8 = Line(p7, p9)
-	seg9 = Line(p8, p9)
-	poly = Polygon(100, 100, 200, 100, 150, 200)
+		r1 = Rectangle(400, 400, 200, 100)
+		r2 = Rectangle(50, 400, 150, 100)
+	end
 
-	r1 = Rectangle(400, 400, 200, 100)
-	print(r1)
+	sorter = generate()
 
 	return true
 end
 
-function love.draw()
-	love.graphics.setColor(0,0,0,255)
-	seg1:draw()
-	seg2:draw()
-	seg3:draw()
-	seg4:draw()
-	seg5:draw()
-	seg6:draw()
-	seg7:draw()
-	seg8:draw()
-	seg9:draw()
-	poly:draw()
+function love.update(dt)
+	for i,v in pairs(sorter.shapes) do
+		v:updatePos(dt)
+	end
 
-	r1:draw()
-	print(r1.x)
+	for i,key in pairs({"down", "up", "left", "right"}) do
+		if love.keyboard.isDown(key) then
+			-- si objet contient une méthode du nom de la clé
+			if type(r1[key]) == "function" then
+				-- on l'appelle. 
+				-- code équivalent à `r1:key(speed*dt)`
+				r1[key](r1, 500*dt)
+			end
+		end
+	end
+end
+
+local bascule
+function love.draw()
+	if false then
+			love.graphics.setColor(black)
+			seg1:draw()
+			seg2:draw()
+			seg3:draw()
+			seg4:draw()
+			seg5:draw()
+			seg6:draw()
+			seg7:draw()
+			seg8:draw()
+			seg9:draw()
+			poly:draw()
+
+			r1:draw()
+			r2:draw()
+	end
+
+	local height = love.graphics.getHeight()
+	love.graphics.translate(0, height)
+	love.graphics.rotate(-math.pi/2)
+	for i,v in pairs(sorter.shapes) do
+		love.graphics.setColor(v.color)
+		v:draw()
+	end
+
+	if r1:collide(r2) and not bascule then
+		print("collision")
+		bascule = true
+	elseif not r1:collide(r2) and bascule then
+		print("pas collision")
+		bascule = false
+	end
 end
 
 function love.keypressed(key, scancode, isrepeat)
-	print(key, scancode, isrepeat)
-	if type(r1[scancode]) == "function" then
-		r1[scancode](r1, 5)
+	if key == "space" then
+		if not toggle then
+			sorter:compact()
+			toggle = true
+		else
+			sorter = generate()
+			toggle = false
+		end
 	end
 end

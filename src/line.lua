@@ -1,8 +1,9 @@
-local Object = require "classic"
+local Shape = require "shape"
 
-local Line = Object:extend()
+local Line = Shape:extend()
 
 function Line:new(p1, p2)
+	self.shape = "Line"
 	self.p1 = p1
 	self.p2 = p2
 
