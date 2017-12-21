@@ -6,6 +6,8 @@ authors = [
         "Quentin Gliech <quentin.gliech@etu.unistra.fr>"
 ]
 
+[lib]
+crate-type = ["rlib", "dylib"]
 
 [dependencies]
 utf8-ranges = "1.0.0"
