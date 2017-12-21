@@ -9,12 +9,24 @@ local white = {255,255,255,255}
 local black = {0,0,0,255}
 local red   = {255,0,0,255}
 
+local rawtype = type
+function type(var)
+	if rawtype(var) == "table" then
+		return var.__type or "table"
+	else
+		return rawtype(var)
+	end
+end
+
 local function generate()
 	local maxx, maxy = love.graphics.getDimensions()
 	local sorter = Sorter()
-	for i=1, 70 do
-		local width  = math.random(20, maxx*0.1)
-		local height = math.random(0.2, 1.8)*width
+	for i=1, 100 do
+		local width  = math.random(20, maxx*0.10)
+		local height = math.random(0.2, 1)*width
+		if math.random(1,10) > 5 then
+			width, height = height, width
+		end
 		local x = math.random(0, maxx-width-10)
 		local y = math.random(0, maxy-height-10)
 		local color = {math.random(0,255),math.random(0,255),math.random(0,255)}
@@ -56,14 +68,14 @@ function love.load()
 		r2 = Rectangle(50, 400, 150, 100)
 	end
 
-	sorter = generate()
-
 	return true
 end
 
 function love.update(dt)
-	for i,v in pairs(sorter.shapes) do
-		v:updatePos(dt)
+	if sorter then
+		for i,v in pairs(sorter.shapes) do
+			v:updatePos(dt)
+		end
 	end
 
 	for i,key in pairs({"down", "up", "left", "right"}) do
@@ -98,11 +110,13 @@ function love.draw()
 	end
 
 	local height = love.graphics.getHeight()
-	love.graphics.translate(0, height)
-	love.graphics.rotate(-math.pi/2)
-	for i,v in pairs(sorter.shapes) do
-		love.graphics.setColor(v.color)
-		v:draw()
+	-- love.graphics.translate(0, height)
+	-- love.graphics.rotate(-math.pi/2)
+	if sorter then
+		for i,v in pairs(sorter.shapes) do
+			love.graphics.setColor(v.color)
+			v:draw()
+		end
 	end
 
 	if r1:collide(r2) and not bascule then
@@ -116,12 +130,18 @@ end
 
 function love.keypressed(key, scancode, isrepeat)
 	if key == "space" then
-		if not toggle then
-			sorter:compact()
-			toggle = true
-		else
+		if not toggle or toggle == 0 then
 			sorter = generate()
-			toggle = false
+			toggle = 1
+		elseif toggle == 1 then
+			sorter:sort()
+			toggle = 0
+		elseif toggle == 2 then
+			sorter:compact()
+			toggle = 0
 		end
+	elseif key == "k" then
+		local v = sorter:findBottomLeft()
+		v.color = v.color == black and red or black
 	end
 end

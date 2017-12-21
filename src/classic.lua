@@ -11,7 +11,7 @@
 local Object = {}
 Object.__index = Object
 
-
+Object.__type = "object"
 function Object:new()
 end
 

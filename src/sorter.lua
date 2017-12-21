@@ -1,5 +1,6 @@
 local Object = require "classic"
 local Sorter = Object:extend()
+local border = 10
 
 function getval(obj, method)
 	if type(obj[method]) == "function" then
@@ -49,35 +50,16 @@ function Sorter:addShape(s)
 	return self
 end
 
-function Sorter:compact()
+function Sorter:sort()
 	local t = {}
 	objectQuicksort(self.shapes, "getArea")
 
 	local maxx, maxy = love.graphics.getDimensions()
-	local border = 10
 	local yoffset = 0
 	maxx, maxy = maxx-2*border, maxy-2*border
 
 	local last = {x=0, y=border, width=0}
 	for i=#self.shapes, 1, -1 do
-		-- current = self.shapes[i]
-		-- last    = self.shapes[i+1] or {newx=0, newy=border, width=0, height=0}
--- 
-		-- current.oldx = current.x
-		-- current.oldy = current.y
-		-- current.newx = last.newx + last.width + border
-		-- current.newy = last.newy
-		-- yoffset = math.max(yoffset, last.height)
--- 
-		-- if current.newx+current.width > maxx then
-		-- 	current.newx = border
-		-- 	current.newy = current.newy + yoffset + border
-		-- 	yoffset = 0
-		-- end
-
-		-- current.x = current.newx
-		-- current.y = current.newy
-
 		local shape = self.shapes[i]
 		local current = {}
 		current.x = last.x + last.width + border
@@ -91,8 +73,86 @@ function Sorter:compact()
 		end
 
 		yoffset = math.max(yoffset, shape.height)
-		shape:moveTo(current.x, current.y)
+		shape:moveTo(current.x, current.y, 2)
 		last = current
+	end
+end
+
+local function findBottomRight(sorted)
+	local match
+	local max = 0
+	local height = love.graphics.getHeight()
+	local width  = love.graphics.getWidth()
+	for i,v in pairs(sorted) do
+		local add = v.newx + v.newy
+		if add > max then
+			match = v
+			max = add
+		end
+	end
+	return match
+end
+
+local function findBottomLeft(sorted)
+	local match
+	local max = -math.huge
+	local height = love.graphics.getHeight()
+	local width  = love.graphics.getWidth()
+	for i,v in pairs(sorted) do
+		local add = -v.newx + v.newy
+		if add > max then
+			match = v
+			max = add
+		end
+	end
+	return match
+end
+
+local function findSpotNextTo(neighbor, shape)
+	local width, height = love.graphics.getDimensions()
+	
+	if neighbor.newx + neighbor.width + border + shape.width < width then
+		return (neighbor.newx + neighbor.width + border), neighbor.newy
+	else
+		return nil
+	end
+end
+
+local function findSpotUnder(neighbor, shape)
+	return neighbor.newx, (neighbor.newy + neighbor.height + border)
+end
+
+local function findSpot(sorted, shape)
+	local width, height = love.graphics.getDimensions()
+	local neighbor = findBottomRight(sorted)
+
+	local x, y
+	for i,v in pairs(sorted) do
+		x, y = findSpotNextTo(v, shape)
+		if x and y then 
+			shape:move(x, y)
+			if not shape:collide(sorted) then
+				return x,y 
+			end
+		end
+	end
+
+	local bottomLeft = findBottomLeft(sorted, shape)
+	return findSpotUnder(bottomLeft)
+end
+
+function Sorter:compact()
+	objectQuicksort(self.shapes, "getArea")
+	
+	local sorted = {}
+	self.shapes[#self.shapes]:moveTo(border, border)
+	table.insert(sorted, self.shapes[#self.shapes])
+
+	for i=#self.shapes-1, 1, -1 do
+		local shape = self.shapes[i]
+		local x, y = findSpot(sorted, shape)
+		shape:moveTo(x, y)
+		table.insert(sorted, shape)
 	end
 end
 
