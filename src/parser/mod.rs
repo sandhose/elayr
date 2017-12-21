@@ -183,7 +183,7 @@ named!(
 );
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct Comment(String);
+pub struct Comment(pub String);
 
 named!(
     comment<Comment>,
@@ -229,9 +229,9 @@ named!(
 );
 
 #[derive(Debug, PartialEq)]
-struct Attribute {
-    name: String,
-    value: String,
+pub struct Attribute {
+    pub name: String,
+    pub value: String,
 }
 
 named!(
@@ -248,17 +248,17 @@ named!(
 );
 
 #[derive(Debug, PartialEq)]
-enum Content {
+pub enum Content {
     Comment(Comment),
     Element(Element),
     Chars(String),
 }
 
 #[derive(Debug, PartialEq)]
-struct Element {
-    name: String,
-    attributes: Vec<Attribute>,
-    children: Vec<Content>,
+pub struct Element {
+    pub name: String,
+    pub attributes: Vec<Attribute>,
+    pub children: Vec<Content>,
 }
 
 named!(
@@ -333,7 +333,7 @@ named!(
 #[derive(Debug, PartialEq)]
 pub struct XMLDoc {
     prolog: XMLProlog,
-    root: Element,
+    pub root: Element,
     misc: Vec<Comment>,
 }
 
