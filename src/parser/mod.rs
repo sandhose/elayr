@@ -75,7 +75,12 @@ macro_rules! attr_value(
 
 macro_rules! space_first(
     ($i:expr, $submac:ident!( $($args:tt)* )) => (
-        preceded!($i, multispace, $submac!( $($args)* ))
+        do_parse!(
+            $i,
+            multispace >>
+            sub: $submac!( $($args)* ) >>
+            (sub)
+        )
     );
     ($i:expr, $j:expr) => (
         space_first!($i, call!($j))
@@ -87,7 +92,7 @@ named!(yes_no, alt!(tag!("yes") | tag!("no")));
 named!(
     sd_decl<bool>,
     map_opt!(
-        ws!(named_attr!("standalone", yes_no)),
+        named_attr!("standalone", yes_no),
         |v| match str::from_utf8(v) {
             Ok("yes") => Some(true),
             Ok("no") => Some(false),
@@ -111,7 +116,7 @@ named!(
 named!(
     enc_decl<String>,
     map_res!(
-        map_res!(ws!(named_attr!("encoding", enc_name)), str::from_utf8),
+        map_res!(named_attr!("encoding", enc_name), str::from_utf8),
         FromStr::from_str
     )
 );
@@ -147,7 +152,7 @@ named!(version_num, take_while1_s!(is_version_num));
 named!(
     version_decl<String>,
     map_res!(
-        map_res!(ws!(named_attr!("version", version_num)), str::from_utf8),
+        map_res!(named_attr!("version", version_num), str::from_utf8),
         FromStr::from_str
     )
 );
@@ -167,11 +172,11 @@ named!(
             version: space_first!(version_decl)
                 >> encoding: alt!(space_first!(enc_decl) | value!(String::from("UTF-8")))
                 >> standalone: alt!(space_first!(sd_decl) | value!(false))
-                >> (XMLDecl {
-                    version,
-                    encoding,
-                    standalone,
-                })
+                >> opt!(multispace) >> (XMLDecl {
+                version,
+                encoding,
+                standalone,
+            })
         ),
         tag!("?>")
     )
@@ -217,7 +222,7 @@ struct Doctype {
 named!(
     doctype_decl<Doctype>,
     delimited!(
-        tag!("<!DOCTYPE"),
+        tag!("<!DOCTYPE "),
         do_parse!(name: ws!(name) >> (Doctype { name })),
         tag!(">")
     )
@@ -281,13 +286,14 @@ named!(
 named!(
     tag_pair<Element>,
     do_parse!(
-        tag!("<") >> tag_name: name >> attributes: many0!(space_first!(attribute)) >> tag!(">")
-            >> children: ws!(many0!(ws!(content))) >> tag!("</") >> name >> opt!(multispace)
-            >> tag!(">") >> (Element {
-            name: tag_name,
-            attributes,
-            children,
-        })
+        tag!("<") >> tag_name: name >> attributes: many0!(space_first!(attribute))
+            >> opt!(multispace) >> tag!(">") >> children: ws!(many0!(ws!(content)))
+            >> tag!("</") >> tag!(tag_name.as_str()) >> opt!(multispace) >> tag!(">")
+            >> (Element {
+                name: tag_name,
+                attributes,
+                children,
+            })
     )
 );
 
