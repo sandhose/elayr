@@ -148,7 +148,9 @@ Les animations du projet reposent sur une fonction d'interpolation toute bête, 
 
 ### Optimisation de l'espace (sorter.lua)
 
-La méthode d'agencement des formes est bien visualisable sur [ce gif](./img/algorithm.gif). 
+La méthode d'agencement des formes est bien visualisable sur ce gif: 
+
+[![](./img/algorithm.gif)](./img/algorithm.gif)
 
 Notre projet contient deux arrangements de forme, `Sorter:sort()` et `Sorter:compact()`. 
 
